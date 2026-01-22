@@ -1,0 +1,132 @@
+# AI Threat Detection System Configuration
+
+# Data Configuration
+data:
+  datasets:
+    unsw_nb15: "data/UNSW-NB15/"
+    cic_ids2017: "data/CIC-IDS2017/"
+  preprocessing:
+    normalize: true
+    feature_selection: true
+    train_test_split: 0.8
+
+# Model Configuration
+models:
+  isolation_forest:
+    contamination: 0.1
+    n_estimators: 100
+    random_state: 42
+  
+  lstm_autoencoder:
+    sequence_length: 50
+    encoding_dim: 32
+    epochs: 100
+    batch_size: 256
+    learning_rate: 0.001
+  
+  ensemble:
+    voting_method: "soft"
+    models: ["isolation_forest", "lstm_autoencoder", "one_class_svm"]
+
+# Detection Thresholds
+thresholds:
+  anomaly_score: 0.7
+  confidence_level: 0.85
+  alert_severity:
+    low: 0.3
+    medium: 0.6
+    high: 0.8
+    critical: 0.9
+
+# SIEM Integration
+siem:
+  elasticsearch:
+    hosts: ["localhost:9200"]
+    index_pattern: "threat-detection-*"
+  
+  kafka:
+    bootstrap_servers: ["localhost:9092"]
+    topic: "security-alerts"
+  
+  splunk:
+    host: "localhost"
+    port: 8089
+    username: "admin"
+
+# Automated Response
+response:
+  enabled: true
+  actions:
+    - type: "isolate_host"
+      severity_threshold: "high"
+    - type: "block_ip"
+      severity_threshold: "medium"
+    - type: "send_alert"
+      severity_threshold: "low"
+
+# Dashboard Configuration
+dashboard:
+  port: 8050
+  refresh_interval: 30  # seconds
+  max_alerts_display: 100
+
+# API Data Collection Configuration
+api_collection:
+  enabled: true
+  collection_interval: 3600  # seconds (1 hour)
+  data_retention_days: 30
+  
+  # Free APIs Configuration
+  apis:
+    abuseipdb:
+      enabled: true
+      rate_limit_per_day: 1000
+      endpoints:
+        - "check_ip"
+    
+    virustotal:
+      enabled: true
+      rate_limit_per_day: 500
+      endpoints:
+        - "file_report"
+        - "url_report"
+    
+    otx_alienvault:
+      enabled: true
+      rate_limit_per_hour: 10000
+      endpoints:
+        - "indicators"
+        - "pulses"
+    
+    ip_api:
+      enabled: true
+      rate_limit_per_minute: 45
+      requires_key: false
+      endpoints:
+        - "geolocation"
+    
+    cve_details:
+      enabled: true
+      requires_key: false
+      endpoints:
+        - "latest_cves"
+    
+    malwarebazaar:
+      enabled: true
+      requires_key: false
+      endpoints:
+        - "recent_samples"
+  
+  # Database Configuration
+  database:
+    type: "sqlite"
+    path: "data/threat_intel.db"
+    backup_enabled: true
+    backup_interval: 86400  # daily backups
+
+# Logging
+logging:
+  level: "INFO"
+  file: "logs/threat_detection.log"
+  max_size: "10MB"
+  backup_count: 5

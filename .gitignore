@@ -1,0 +1,122 @@
+# ========================================
+# SENSITIVE DATA - DO NOT COMMIT
+# ========================================
+
+# Environment variables (contains API keys, passwords)
+.env
+.env.local
+.env.*.local
+*.env
+
+# Database files (contains collected threat data)
+*.db
+*.sqlite
+*.sqlite3
+data/threat_intel.db
+
+# Results folder (may contain sensitive analysis)
+results/
+
+# ========================================
+# PYTHON
+# ========================================
+
+# Virtual environment
+venv/
+env/
+.venv/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ========================================
+# JUPYTER NOTEBOOKS
+# ========================================
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ========================================
+# IDE / EDITORS
+# ========================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# ========================================
+# OS FILES
+# ========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ========================================
+# LOGS
+# ========================================
+logs/
+*.log
+*.log.*
+
+# ========================================
+# MODELS (may contain sensitive trained data)
+# ========================================
+models/*.pkl
+models/*.h5
+models/*.pt
+models/*.pth
+models/*.joblib
+
+# ========================================
+# DATA FILES (large datasets)
+# ========================================
+# Keep the folder structure but ignore large CSV files
+# Uncomment below if you don't want to push datasets
+# data/**/*.csv
+
+# ========================================
+# CREDENTIALS & SECRETS
+# ========================================
+*.pem
+*.key
+*.crt
+credentials.json
+secrets.json
+config/secrets.yaml
