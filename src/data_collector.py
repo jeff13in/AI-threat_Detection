@@ -33,10 +33,18 @@ class ThreatDataCollector:
         self.session.headers.update({
             'User-Agent': 'AI-ThreatDetection/1.0'
         })
-        
+
         # Initialize database
         self.db_path = "data/threat_intel.db"
         self._init_database()
+
+        # Optional Kafka producer for real-time streaming
+        self._kafka_producer = None
+        try:
+            from src.kafka_pipeline import ThreatEventProducer
+            self._kafka_producer = ThreatEventProducer()
+        except Exception:
+            pass  # Runs in offline mode; events still stored in SQLite
         
         # API configurations
         self.apis = {
@@ -390,7 +398,17 @@ class ThreatDataCollector:
         self.store_api_response(otx_response, "otx_indicators")
         
         self.logger.info(f"Completed threat intelligence collection. Processed {len(responses)} API calls")
-        
+
+        # Stream successful responses to Kafka for downstream Elasticsearch indexing
+        if self._kafka_producer and self._kafka_producer.connected:
+            streamed = 0
+            for resp in responses:
+                if resp.success:
+                    self._kafka_producer.publish_threat_intel(resp.source, resp.data)
+                    streamed += 1
+            self.logger.info(f"Streamed {streamed} successful responses to Kafka")
+            self._kafka_producer.close()
+
         return responses
 
     def get_stored_data(self, source: str = None, days_back: int = 7) -> List[Dict]:

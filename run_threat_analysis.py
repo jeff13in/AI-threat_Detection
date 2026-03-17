@@ -15,6 +15,13 @@ load_dotenv()
 
 from src.data_collector import ThreatDataCollector
 
+# SIEM pipeline integration (optional — gracefully offline if Kafka/ES not running)
+try:
+    from src.siem_pipeline import SIEMPipeline
+    _siem_available = True
+except ImportError:
+    _siem_available = False
+
 def run_analysis():
     print("=" * 70)
     print("           THREAT INTELLIGENCE ANALYSIS")
@@ -220,6 +227,26 @@ def run_analysis():
         cve_df = pd.DataFrame(cve_simplified)
         cve_df.to_csv(cve_csv_path, index=False)
         print(f"  ✅ CVE CSV: {cve_csv_path}")
+
+    # ========================================
+    # 4. SIEM Pipeline — Kafka + Elasticsearch
+    # ========================================
+    print("[4/4] Publishing results to SIEM Pipeline (Kafka + Elasticsearch)...")
+    print("-" * 50)
+
+    if _siem_available:
+        try:
+            pipeline = SIEMPipeline()
+            siem_summary = pipeline.process_threat_analysis_results(results)
+
+            for source, res in siem_summary.items():
+                print(f"  {source}: indexed {res.get('indexed', 0)}/{res.get('total', 0)} to Elasticsearch")
+
+            pipeline.print_status()
+        except Exception as e:
+            print(f"  ⚠️  SIEM pipeline error (non-fatal): {e}")
+    else:
+        print("  ⚠️  SIEM pipeline not available — skipping")
 
     print()
     print("=" * 70)

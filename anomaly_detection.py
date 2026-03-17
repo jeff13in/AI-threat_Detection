@@ -14,6 +14,13 @@ from sklearn.cluster import DBSCAN
 import warnings
 warnings.filterwarnings('ignore')
 
+# SIEM pipeline integration (optional — runs in offline mode if Kafka/ES unavailable)
+try:
+    from src.siem_pipeline import SIEMPipeline
+    _siem_available = True
+except ImportError:
+    _siem_available = False
+
 # Set visualization style
 sns.set_style("whitegrid")
 plt.rcParams['figure.figsize'] = (12, 8)
@@ -363,6 +370,31 @@ def save_anomaly_report(df):
         top_100.to_csv(top_100_file, index=False)
         print(f"Saved top 100 anomalies to: {top_100_file}")
 
+def publish_anomalies_to_siem(anomalies_df: pd.DataFrame):
+    """Publish detected anomalies to Kafka and Elasticsearch via the SIEM pipeline."""
+    if not _siem_available:
+        print("\n[SIEM] src.siem_pipeline not importable — skipping SIEM publish")
+        return
+
+    print("\n" + "=" * 80)
+    print("SIEM PIPELINE — PUBLISHING ANOMALIES")
+    print("=" * 80)
+
+    try:
+        pipeline = SIEMPipeline()
+        results = pipeline.process_anomalies(anomalies_df)
+
+        kafka = results.get('kafka', {})
+        es = results.get('elasticsearch', {})
+        print(f"\n  Kafka    → published {kafka.get('success', 0)}/{kafka.get('total', 0)} events "
+              f"(topic: anomaly-detections)")
+        print(f"  ES Index → indexed   {es.get('success', 0)}/{es.get('total', 0)} docs "
+              f"(index: threat-detection-anomalies)")
+        pipeline.print_status()
+    except Exception as e:
+        print(f"[SIEM] Pipeline error (non-fatal): {e}")
+
+
 def main():
     """Main analysis pipeline"""
     print("\n")
@@ -398,7 +430,10 @@ def main():
         
         # Save report
         save_anomaly_report(df)
-        
+
+        # --- SIEM Pipeline: stream anomalies to Kafka + Elasticsearch ---
+        publish_anomalies_to_siem(if_anomalies)
+
         print("\n" + "=" * 80)
         print("ANALYSIS COMPLETE!")
         print("=" * 80)
