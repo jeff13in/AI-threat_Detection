@@ -6,6 +6,7 @@ for all threat intelligence and anomaly data.
 
 import logging
 import os
+import warnings
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -129,6 +130,9 @@ class ThreatIntelElasticsearch:
     def __init__(self, hosts: Optional[List[str]] = None):
         es_url = os.getenv('ELASTICSEARCH_URL', 'http://localhost:9200')
         self.hosts = hosts or [es_url]
+        self._es_user = os.getenv('ELASTICSEARCH_USER')
+        self._es_password = os.getenv('ELASTICSEARCH_PASSWORD')
+        self._es_api_key = os.getenv('ELASTICSEARCH_API_KEY')
         self.es = None
         self.connected = False
         self._connect()
@@ -136,12 +140,26 @@ class ThreatIntelElasticsearch:
     def _connect(self):
         try:
             from elasticsearch import Elasticsearch
-            self.es = Elasticsearch(
-                self.hosts,
-                request_timeout=10,
-                retry_on_timeout=True,
-                max_retries=2,
-            )
+            # Warn if connecting over plain HTTP to a non-localhost host
+            for host in self.hosts:
+                if host.startswith('http://') and 'localhost' not in host and '127.0.0.1' not in host:
+                    warnings.warn(
+                        f"Elasticsearch host '{host}' uses HTTP without TLS. "
+                        "Use HTTPS in non-local deployments.",
+                        stacklevel=2,
+                    )
+
+            kwargs: Dict[str, Any] = {
+                'request_timeout': 10,
+                'retry_on_timeout': True,
+                'max_retries': 2,
+            }
+            if self._es_api_key:
+                kwargs['api_key'] = self._es_api_key
+            elif self._es_user and self._es_password:
+                kwargs['http_auth'] = (self._es_user, self._es_password)
+
+            self.es = Elasticsearch(self.hosts, **kwargs)
             if self.es.ping():
                 self.connected = True
                 logger.info(f"Elasticsearch connected at {self.hosts}")

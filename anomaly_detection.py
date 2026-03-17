@@ -183,8 +183,8 @@ def prepare_features_for_ml(df):
     for feat in categorical_features:
         try:
             X[feat + '_encoded'] = le.fit_transform(feature_df[feat].fillna('Unknown'))
-        except:
-            print(f"Warning: Could not encode {feat}")
+        except Exception as e:
+            print(f"Warning: Could not encode {feat}: {e}")
     
     # Fill missing values
     X = X.fillna(X.median())

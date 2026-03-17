@@ -7,7 +7,7 @@ import requests
 import time
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 import os
 from dataclasses import dataclass
@@ -64,7 +64,7 @@ class ThreatDataCollector:
                 'requires_key': True
             },
             'ip_api': {
-                'base_url': 'http://ip-api.com/json',
+                'base_url': 'https://ip-api.com/json',
                 'rate_limit': 45,    # requests per minute
                 'requires_key': False
             },
@@ -148,7 +148,7 @@ class ThreatDataCollector:
                 return APIResponse(
                     source=url.split('/')[2],  # Extract domain
                     data=response.json() if response.content else {},
-                    timestamp=datetime.now(),
+                    timestamp=datetime.now(timezone.utc),
                     success=True
                 )
             else:
@@ -157,7 +157,7 @@ class ThreatDataCollector:
                 return APIResponse(
                     source=url.split('/')[2],
                     data={},
-                    timestamp=datetime.now(),
+                    timestamp=datetime.now(timezone.utc),
                     success=False,
                     error_message=error_msg
                 )
@@ -168,7 +168,7 @@ class ThreatDataCollector:
             return APIResponse(
                 source=url.split('/')[2] if '/' in url else 'unknown',
                 data={},
-                timestamp=datetime.now(),
+                timestamp=datetime.now(timezone.utc),
                 success=False,
                 error_message=error_msg
             )
@@ -176,7 +176,7 @@ class ThreatDataCollector:
     def check_ip_reputation_abuseipdb(self, ip_address: str) -> APIResponse:
         """Check IP reputation using AbuseIPDB"""
         if not self.api_keys['abuseipdb']:
-            return APIResponse('abuseipdb', {}, datetime.now(), False, 'API key not found')
+            return APIResponse('abuseipdb', {}, datetime.now(timezone.utc), False, 'API key not found')
         
         url = f"{self.apis['abuseipdb']['base_url']}/check"
         headers = {
@@ -199,6 +199,16 @@ class ThreatDataCollector:
 
     def get_ip_geolocation(self, ip_address: str) -> APIResponse:
         """Get IP geolocation data using IP-API (free, no key required)"""
+        import ipaddress
+        try:
+            parsed = ipaddress.ip_address(ip_address)
+            if parsed.is_private or parsed.is_loopback or parsed.is_link_local or parsed.is_reserved:
+                return APIResponse('ip_api', {}, datetime.now(timezone.utc), False,
+                                   f'Blocked: {ip_address} is a non-public address')
+        except ValueError:
+            return APIResponse('ip_api', {}, datetime.now(timezone.utc), False,
+                               f'Invalid IP address: {ip_address}')
+
         url = f"{self.apis['ip_api']['base_url']}/{ip_address}"
         
         response = self._make_request(url)
@@ -211,7 +221,7 @@ class ThreatDataCollector:
     def check_file_virustotal(self, file_hash: str) -> APIResponse:
         """Check file reputation using VirusTotal API v3"""
         if not self.api_keys['virustotal']:
-            return APIResponse('virustotal', {}, datetime.now(), False, 'API key not found')
+            return APIResponse('virustotal', {}, datetime.now(timezone.utc), False, 'API key not found')
 
         url = f"{self.apis['virustotal']['base_url']}/files/{file_hash}"
         headers = {
@@ -235,7 +245,7 @@ class ThreatDataCollector:
         If no indicator_value provided, returns subscribed pulses instead.
         """
         if not self.api_keys['otx_alienvault']:
-            return APIResponse('otx', {}, datetime.now(), False, 'API key not found')
+            return APIResponse('otx', {}, datetime.now(timezone.utc), False, 'API key not found')
 
         headers = {
             'X-OTX-API-KEY': self.api_keys['otx_alienvault']
@@ -263,7 +273,7 @@ class ThreatDataCollector:
     def get_malware_samples(self, limit: int = 100) -> APIResponse:
         """Get recent malware samples from MalwareBazaar (requires Auth-Key)"""
         if not self.api_keys.get('malwarebazaar'):
-            return APIResponse('malwarebazaar', {}, datetime.now(), False,
+            return APIResponse('malwarebazaar', {}, datetime.now(timezone.utc), False,
                              'API key not found. Get free key at https://auth.abuse.ch/')
 
         url = f"{self.apis['malwarebazaar']['base_url']}/"
@@ -282,7 +292,7 @@ class ThreatDataCollector:
                 return APIResponse(
                     source='malwarebazaar',
                     data=response.json() if response.content else {},
-                    timestamp=datetime.now(),
+                    timestamp=datetime.now(timezone.utc),
                     success=True
                 )
             else:
@@ -290,16 +300,16 @@ class ThreatDataCollector:
                 return APIResponse(
                     source='malwarebazaar',
                     data={},
-                    timestamp=datetime.now(),
+                    timestamp=datetime.now(timezone.utc),
                     success=False,
                     error_message=error_msg
                 )
 
-        except Exception as e:
+        except requests.exceptions.RequestException as e:
             return APIResponse(
                 source='malwarebazaar',
                 data={},
-                timestamp=datetime.now(),
+                timestamp=datetime.now(timezone.utc),
                 success=False,
                 error_message=str(e)
             )
@@ -336,7 +346,7 @@ class ThreatDataCollector:
         
         try:
             # Create hash for deduplication
-            request_hash = hashlib.md5(f"{response.source}_{endpoint}_{datetime.now().date()}".encode()).hexdigest()
+            request_hash = hashlib.sha256(f"{response.source}_{endpoint}_{datetime.now(timezone.utc).date()}".encode()).hexdigest()
             
             cursor.execute('''
                 INSERT OR REPLACE INTO api_responses 
@@ -417,18 +427,19 @@ class ThreatDataCollector:
         cursor = conn.cursor()
         
         try:
+            interval = f'-{int(days_back)} days'
             if source:
                 cursor.execute('''
-                    SELECT * FROM api_responses 
-                    WHERE source = ? AND timestamp >= datetime('now', '-{} days')
+                    SELECT * FROM api_responses
+                    WHERE source = ? AND timestamp >= datetime('now', ?)
                     ORDER BY timestamp DESC
-                '''.format(days_back), (source,))
+                ''', (source, interval))
             else:
                 cursor.execute('''
-                    SELECT * FROM api_responses 
-                    WHERE timestamp >= datetime('now', '-{} days')
+                    SELECT * FROM api_responses
+                    WHERE timestamp >= datetime('now', ?)
                     ORDER BY timestamp DESC
-                '''.format(days_back))
+                ''', (interval,))
             
             columns = [description[0] for description in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]

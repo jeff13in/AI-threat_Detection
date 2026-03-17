@@ -158,7 +158,7 @@ class ThreatEventConsumer:
                 group_id=self.group_id,
                 value_deserializer=lambda v: json.loads(v.decode('utf-8')),
                 auto_offset_reset='earliest',
-                enable_auto_commit=True,
+                enable_auto_commit=False,
                 consumer_timeout_ms=5000,
             )
             self.connected = True
@@ -189,12 +189,16 @@ class ThreatEventConsumer:
                 event = message.value
                 event_type = event.get('event_type', 'unknown')
                 handler = self._handlers.get(event_type) or self._handlers.get('*')
+                handler_ok = True
                 if handler:
                     try:
                         handler(event)
                     except Exception as e:
+                        handler_ok = False
                         logger.error(f"Handler error for event_type='{event_type}': {e}")
-                processed.append(event)
+                if handler_ok:
+                    self.consumer.commit()
+                    processed.append(event)
                 count += 1
                 if count >= max_messages:
                     break
